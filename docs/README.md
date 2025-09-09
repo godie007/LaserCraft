@@ -1,108 +1,203 @@
-# LaserCraft Studio - Documentación 📚
+# 📚 Documentación Completa - LaserCraft Studio
 
-## **Índice de Documentación**
+Documentación completa y detallada para LaserCraft Studio, optimizada para LASER TREE 10W.
 
-### **📖 Documentación Principal**
-- [README Principal](../README.md) - Guía de inicio y configuración
-- [Visión General del Proyecto](../PROJECT_OVERVIEW.md) - Descripción completa del proyecto
-- [Guía de Marca](../BRANDING.md) - Identidad visual y branding
+## 🎯 Índice de Documentación
 
-### **🔧 Documentación Técnica**
+### 🚀 Guías de Inicio
+- **[Instalación](./INSTALLATION.md)** - Guía completa de instalación paso a paso
+- **[Configuración Avanzada](./CONFIGURATION.md)** - Configuración optimizada para LASER TREE 10W
+- **[API Reference](./API.md)** - Documentación completa de la API REST
 
-#### **Backend (Python + Flask)**
-- **API Endpoints**: Documentación de todos los endpoints REST
-- **Generación de G-code**: Algoritmos y lógica de generación
-- **Procesamiento de Imágenes**: Vectorización y detección de contornos
-- **Configuración**: Variables de entorno y parámetros
+### 🛠️ Solución de Problemas
+- **[Troubleshooting](./TROUBLESHOOTING.md)** - Guía completa para resolver problemas comunes
 
-#### **Frontend (React + TypeScript)**
-- **Componentes**: Documentación de componentes React
-- **Vista 3D**: Implementación con Three.js
-- **Estado**: Gestión de estado con React Hooks
-- **UI/UX**: Material-UI y diseño responsivo
+### 🖼️ Recursos Visuales
+- **[Imágenes](./images/)** - Capturas de pantalla y recursos visuales
 
-### **🚀 Guías de Uso**
+## 🔥 Características Principales
 
-#### **Para Desarrolladores**
-1. **Configuración del Entorno**
-   - Instalación de dependencias
-   - Configuración de variables de entorno
-   - Ejecución en modo desarrollo
+### ✨ **Grabado de Texto Avanzado**
+- 🎯 **Potencia optimizada** para LASER TREE 10W
+- 📝 **Múltiples fuentes** (Arial, Times New Roman, Courier New)
+- ⚙️ **Configuraciones predefinidas** para diferentes materiales
+- 🎨 **Centrado automático** o posicionamiento manual
 
-2. **Arquitectura del Sistema**
-   - Estructura de archivos
-   - Flujo de datos
-   - Patrones de diseño utilizados
+### 🖼️ **Procesamiento de Imágenes**
+- 🖥️ **Vista previa en tiempo real** del procesamiento
+- 🎛️ **Controles avanzados** de umbralización y simplificación
+- 🔧 **Presets específicos** para diferentes materiales
+- 📐 **Escalado automático** manteniendo proporciones
 
-3. **API Reference**
-   - Endpoints disponibles
-   - Parámetros y respuestas
-   - Códigos de error
+### ✂️ **Corte Láser Preciso**
+- 📏 **Cortes simples y múltiples** con configuración individual
+- 📐 **Ángulos personalizables** (0° a 360°)
+- 🎯 **Profundidad configurable** con múltiples pasadas
+- ⚡ **Presets optimizados** para cada material y grosor
 
-#### **Para Usuarios Finales**
-1. **Generación de G-code desde Texto**
-   - Configuración de parámetros
-   - Presets predefinidos
-   - Descarga de archivos
+### 🎮 **Vista Previa 3D**
+- 🌐 **Visualización interactiva** del G-code generado
+- 📊 **Representación realista** de las trayectorias del láser
+- 🔍 **Zoom y rotación** para inspección detallada
 
-2. **Procesamiento de Imágenes**
-   - Carga de imágenes
-   - Ajuste de parámetros
-   - Configuraciones por material
+## 🚀 Inicio Rápido
 
-3. **Vista Previa 3D**
-   - Navegación interactiva
-   - Validación visual
-   - Exportación de resultados
+### 📋 Prerrequisitos
+- **Python 3.8+**
+- **Node.js 16+**
+- **LASER TREE 10W** (o compatible)
 
-### **🔍 Solución de Problemas**
+### ⚡ Instalación en 3 pasos
 
-#### **Problemas Comunes**
-- **Error 404 en descarga**: Refrescar página (Ctrl+F5)
-- **Imagen no se procesa**: Verificar formato y tamaño
-- **G-code no compatible**: Usar presets recomendados
-- **Vista 3D no carga**: Verificar compatibilidad del navegador
+```bash
+# 1️⃣ Clonar el repositorio
+git clone https://github.com/godie007/LaserCraft.git
+cd LaserCraft
 
-#### **Logs y Debug**
-- **Backend**: Logs en consola del servidor Flask
-- **Frontend**: F12 → Console para logs de debug
-- **Network**: F12 → Network para verificar requests
+# 2️⃣ Instalar dependencias del backend
+cd backend
+pip install -r requirements.txt
 
-### **📊 Compatibilidad**
+# 3️⃣ Instalar dependencias del frontend
+cd ../frontend
+npm install
+```
 
-#### **Navegadores Soportados**
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
+### 🎯 Ejecutar la aplicación
 
-#### **Controladores Láser**
-- GRBL 1.1+
-- Firmware compatible con G-code estándar
+```bash
+# Backend (Terminal 1)
+cd backend
+python app.py
 
-#### **Formatos de Imagen**
-- PNG (recomendado)
-- JPG/JPEG
-- BMP
+# Frontend (Terminal 2)
+cd frontend
+npm run dev
+```
 
-### **🤝 Contribución**
+**🌐 Abrir:** http://localhost:3000
 
-#### **Cómo Contribuir**
-1. Fork el proyecto
-2. Crea una rama para tu feature
-3. Implementa cambios con tests
-4. Envía Pull Request
+## 🔧 Configuraciones Optimizadas
 
-#### **Estándares de Código**
-- **Python**: PEP 8
-- **TypeScript**: ESLint configurado
-- **Commits**: Conventional Commits
-- **Documentación**: Markdown con ejemplos
+### 📊 Presets para LASER TREE 10W
 
-### **📄 Licencia**
+| Material | Grosor | Potencia | Velocidad | Pasadas |
+|----------|--------|----------|-----------|---------|
+| **Madera Blanda** | 3mm | 80% | 150 mm/min | 3 |
+| **Madera Blanda** | 6mm | 90% | 100 mm/min | 5 |
+| **Madera Dura** | 3mm | 85% | 120 mm/min | 4 |
+| **Acrílico** | 3mm | 80% | 100 mm/min | 2 |
+| **Acrílico** | 5mm | 90% | 50 mm/min | 3 |
+| **MDF** | 3mm | 75% | 150 mm/min | 2 |
+| **MDF** | 6mm | 90% | 80 mm/min | 3 |
+
+### ⚡ Capacidades Máximas
+- **Madera:** Hasta 10mm
+- **Acrílico:** Hasta 8mm  
+- **MDF:** Hasta 6mm
+- **Cartón:** Hasta 5mm
+- **Cuero:** Hasta 3mm
+
+## 🛠️ Tecnologías Utilizadas
+
+### 🖥️ Frontend
+- **React 18** - Framework principal
+- **TypeScript** - Tipado estático
+- **Material-UI** - Componentes de interfaz
+- **Three.js** - Visualización 3D
+- **Vite** - Build tool moderno
+
+### ⚙️ Backend
+- **Python 3.8+** - Lenguaje principal
+- **Flask** - Framework web
+- **OpenCV** - Procesamiento de imágenes
+- **NumPy** - Cálculos matemáticos
+- **Matplotlib** - Generación de gráficos
+
+### 🔧 Herramientas
+- **Git** - Control de versiones
+- **ESLint** - Linting de código
+- **Prettier** - Formateo de código
+
+## 📚 Documentación Detallada
+
+### 🚀 [Guía de Instalación](./INSTALLATION.md)
+- Prerrequisitos del sistema
+- Instalación paso a paso
+- Configuración de entorno
+- Verificación de instalación
+- Solución de problemas de instalación
+
+### ⚙️ [Configuración Avanzada](./CONFIGURATION.md)
+- Parámetros de potencia optimizados
+- Configuraciones por material
+- Procesamiento de imágenes
+- Configuración de corte láser
+- Optimización de rendimiento
+- Configuración de seguridad
+
+### 🔧 [API Reference](./API.md)
+- Endpoints completos
+- Parámetros de request/response
+- Códigos de estado HTTP
+- Manejo de errores
+- Ejemplos de uso en Python, JavaScript y cURL
+
+### 🐛 [Troubleshooting](./TROUBLESHOOTING.md)
+- Problemas de instalación
+- Problemas de conexión
+- Problemas de procesamiento
+- Problemas de interfaz
+- Debugging y logs
+- Guía de soporte
+
+## 🎨 Recursos Visuales
+
+### 📸 Capturas de Pantalla
+
+#### 🏠 Pantalla Principal
+![Pantalla Principal](./images/1.png)
+*Interfaz principal con todas las funcionalidades disponibles*
+
+#### ⚙️ Configuración de Grabado
+![Configuración](./images/2.png)
+*Panel de configuración con presets optimizados para LASER TREE 10W*
+
+#### 🖼️ Procesamiento de Imágenes
+![Procesamiento](./images/3.png)
+*Herramientas avanzadas de procesamiento de imágenes*
+
+## 🤝 Contribuir
+
+¡Las contribuciones son bienvenidas! Por favor:
+
+1. 🍴 Fork el proyecto
+2. 🌿 Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
+3. 💾 Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
+4. 📤 Push a la rama (`git push origin feature/AmazingFeature`)
+5. 🔄 Abre un Pull Request
+
+## 📄 Licencia
 
 Este proyecto está bajo la Licencia MIT. Ver [LICENSE](../LICENSE) para más detalles.
 
+## 👨‍💻 Autor
+
+**Diego** - [@godie007](https://github.com/godie007)
+
+## 🙏 Agradecimientos
+
+- **LASER TREE** por el excelente láser de 10W
+- **Comunidad Open Source** por las librerías utilizadas
+- **Contribuidores** que ayudan a mejorar el proyecto
+
 ---
 
-**LaserCraft Studio** - Documentación mantenida con ❤️ para la comunidad de grabado láser
+<div align="center">
+
+**⭐ Si te gusta este proyecto, ¡dale una estrella! ⭐**
+
+[![GitHub stars](https://img.shields.io/github/stars/godie007/LaserCraft?style=social)](https://github.com/godie007/LaserCraft/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/godie007/LaserCraft?style=social)](https://github.com/godie007/LaserCraft/network)
+
+</div>

@@ -136,3 +136,17 @@ docs/build/
 # Lock files (keep package-lock.json for consistency)
 # yarn.lock
 # pnpm-lock.yaml
+
+# LaserCraft specific files
+*.gcode
+*.nc
+*.tap
+*.laser
+*.cut
+
+# Generated documentation images (keep placeholders)
+docs/images/*.png
+docs/images/*.jpg
+docs/images/*.jpeg
+!docs/images/placeholder.md
+!docs/images/README.md
