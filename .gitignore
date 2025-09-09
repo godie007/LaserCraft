@@ -144,9 +144,7 @@ docs/build/
 *.laser
 *.cut
 
-# Generated documentation images (keep placeholders)
-docs/images/*.png
-docs/images/*.jpg
-docs/images/*.jpeg
-!docs/images/placeholder.md
-!docs/images/README.md
+# Documentation images (include in repository)
+# docs/images/*.png - Keep documentation images
+# docs/images/*.jpg - Keep documentation images  
+# docs/images/*.jpeg - Keep documentation images
