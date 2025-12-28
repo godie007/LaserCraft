@@ -123,7 +123,7 @@ interface CutPreset {
   parameters: Partial<CutParameters>;
 }
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://localhost:5001/api';
 
 const App: React.FC = () => {
   // Estados
@@ -183,6 +183,26 @@ const App: React.FC = () => {
     feed_rate: 300,
     figure_width: 50
   });
+
+  // Estados para procesamiento SVG
+  const [uploadedSvg, setUploadedSvg] = useState<File | null>(null);
+  const [svgInfo, setSvgInfo] = useState<any>(null);
+  const [svgElements, setSvgElements] = useState<any[]>([]);
+  const [selectedElements, setSelectedElements] = useState<Set<string>>(new Set());
+  const [svgLayers, setSvgLayers] = useState<Array<{
+    layer_name: string;
+    speed: number;
+    power: number;
+    num_passes: number;
+    element_ids: string[];
+  }>>([]);
+  const [isUploadingSvg, setIsUploadingSvg] = useState(false);
+  const [isLoadingElements, setIsLoadingElements] = useState(false);
+  const [isGeneratingSvgGcode, setIsGeneratingSvgGcode] = useState(false);
+  const [svgFilePath, setSvgFilePath] = useState<string>('');
+  const [svgScale, setSvgScale] = useState<number>(1.0);
+  const [svgOffsetX, setSvgOffsetX] = useState<number>(0.0);
+  const [svgOffsetY, setSvgOffsetY] = useState<number>(0.0);
 
   // Cargar presets al montar el componente
   useEffect(() => {
@@ -255,7 +275,7 @@ const App: React.FC = () => {
             responseType: 'text'
           });
           setGeneratedGCode(gcodeResponse.data);
-          setActiveTab(3); // Cambiar a la pestaña de vista previa
+          setActiveTab(4); // Cambiar a la pestaña de vista previa
         } catch (gcodeError) {
           console.error('Error obteniendo G-code para vista previa:', gcodeError);
         }
@@ -605,7 +625,7 @@ const App: React.FC = () => {
         document.body.removeChild(link);
         
         // Cambiar a vista previa 3D
-        setActiveTab(3);
+        setActiveTab(4);
         
         // Recargar lista de archivos
         loadGeneratedFiles();
@@ -662,7 +682,7 @@ const App: React.FC = () => {
             responseType: 'text'
           });
           setGeneratedGCode(gcodeResponse.data);
-          setActiveTab(4); // Cambiar a la pestaña de G-code
+          setActiveTab(5); // Cambiar a la pestaña de G-code
         } catch (gcodeError) {
           console.error('Error obteniendo G-code para vista previa:', gcodeError);
         }
@@ -722,6 +742,191 @@ const App: React.FC = () => {
     ));
   };
 
+  // Funciones para manejo de SVG
+  const handleSvgUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.svg')) {
+      setAlert({ type: 'error', message: 'Solo se permiten archivos SVG' });
+      return;
+    }
+
+    setUploadedSvg(file);
+    setIsUploadingSvg(true);
+    setAlert(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('svg', file, file.name);
+
+      const response = await axios.post(`${API_BASE_URL}/upload-svg`, formData, {
+        headers: { 
+          'Content-Type': 'multipart/form-data'
+        },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            console.log(`Upload progress: ${percentCompleted}%`);
+          }
+        }
+      });
+
+      if (response.data.success) {
+        setSvgInfo(response.data.svg_info);
+        setSvgFilePath(response.data.filepath);
+        setAlert({ type: 'success', message: 'SVG subido correctamente' });
+        
+        // Cargar elementos automáticamente
+        await loadSvgElements(response.data.filepath);
+      }
+    } catch (error: any) {
+      setAlert({ 
+        type: 'error', 
+        message: error.response?.data?.error || 'Error al subir SVG' 
+      });
+    } finally {
+      setIsUploadingSvg(false);
+    }
+  };
+
+  const loadSvgElements = async (filepath: string) => {
+    setIsLoadingElements(true);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/svg-elements`, { filepath });
+      if (response.data.success) {
+        setSvgElements(response.data.elements);
+        setAlert({ type: 'success', message: `${response.data.total_elements} elementos cargados` });
+      }
+    } catch (error: any) {
+      setAlert({ 
+        type: 'error', 
+        message: error.response?.data?.error || 'Error al cargar elementos SVG' 
+      });
+    } finally {
+      setIsLoadingElements(false);
+    }
+  };
+
+  const toggleElementSelection = (elementId: string) => {
+    setSelectedElements(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(elementId)) {
+        newSet.delete(elementId);
+      } else {
+        newSet.add(elementId);
+      }
+      return newSet;
+    });
+  };
+
+  const addLayer = () => {
+    setSvgLayers(prev => [...prev, {
+      layer_name: `Capa ${prev.length + 1}`,
+      speed: 100, // Velocidad más lenta por defecto (100 mm/min)
+      power: 100,
+      num_passes: 1,
+      element_ids: []
+    }]);
+  };
+
+  const removeLayer = (index: number) => {
+    setSvgLayers(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateLayer = (index: number, field: string, value: any) => {
+    setSvgLayers(prev => prev.map((layer, i) => 
+      i === index ? { ...layer, [field]: value } : layer
+    ));
+  };
+
+  const assignSelectedToLayer = (layerIndex: number) => {
+    if (selectedElements.size === 0) {
+      setAlert({ type: 'warning', message: 'Selecciona elementos primero' });
+      return;
+    }
+
+    setSvgLayers(prev => prev.map((layer, i) => 
+      i === layerIndex 
+        ? { ...layer, element_ids: Array.from(selectedElements) }
+        : layer
+    ));
+    
+    setAlert({ type: 'success', message: `${selectedElements.size} elementos asignados a la capa` });
+  };
+
+  const generateSvgGCode = async () => {
+    if (svgLayers.length === 0) {
+      setAlert({ type: 'warning', message: 'Crea al menos una capa' });
+      return;
+    }
+
+    const layersWithElements = svgLayers.filter(layer => layer.element_ids.length > 0);
+    if (layersWithElements.length === 0) {
+      setAlert({ type: 'warning', message: 'Asigna elementos a las capas' });
+      return;
+    }
+
+    setIsGeneratingSvgGcode(true);
+    setAlert(null);
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/generate-from-svg`, {
+        filepath: svgFilePath,
+        layers: layersWithElements,
+        table_width: parameters.table_width,
+        table_height: parameters.table_height,
+        scale_factor: svgScale,
+        offset_x: svgOffsetX,
+        offset_y: svgOffsetY
+      });
+
+      if (response.data.success) {
+        setAlert({ 
+          type: 'success', 
+          message: `G-code generado desde SVG: ${response.data.layers_processed} capas procesadas. Descargando...` 
+        });
+
+        // Obtener G-code para vista previa
+        try {
+          const gcodeResponse = await axios.get(`${API_BASE_URL}/download/${response.data.filename}`, {
+            responseType: 'text'
+          });
+          setGeneratedGCode(gcodeResponse.data);
+          setActiveTab(4); // Cambiar a pestaña de G-code
+        } catch (gcodeError) {
+          console.error('Error obteniendo G-code:', gcodeError);
+        }
+
+        // Descargar archivo
+        setIsDownloading(true);
+        const filename = response.data.filename;
+        const downloadUrl = `${API_BASE_URL.replace('/api', '')}/api/download/${filename}`;
+        
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+
+        setTimeout(() => {
+          document.body.removeChild(link);
+          setIsDownloading(false);
+        }, 1000);
+
+        loadGeneratedFiles();
+      }
+    } catch (error: any) {
+      setAlert({ 
+        type: 'error', 
+        message: error.response?.data?.error || 'Error al generar G-code desde SVG' 
+      });
+    } finally {
+      setIsGeneratingSvgGcode(false);
+    }
+  };
+
   const generateMultipleCutsGCode = async () => {
     if (multipleCuts.length === 0) {
       setAlert({ type: 'warning', message: 'Agrega al menos un corte' });
@@ -752,7 +957,7 @@ const App: React.FC = () => {
             responseType: 'text'
           });
           setGeneratedGCode(gcodeResponse.data);
-          setActiveTab(4); // Cambiar a la pestaña de G-code
+          setActiveTab(5); // Cambiar a la pestaña de G-code
         } catch (gcodeError) {
           console.error('Error obteniendo G-code para vista previa:', gcodeError);
         }
@@ -831,6 +1036,11 @@ const App: React.FC = () => {
             <Tab 
               icon={<Image />} 
               label="Procesar Imagen" 
+              iconPosition="start"
+            />
+            <Tab 
+              icon={<Code />} 
+              label="Procesar SVG" 
               iconPosition="start"
             />
             <Tab 
@@ -1480,8 +1690,338 @@ const App: React.FC = () => {
           </Box>
         )}
 
-        {/* Pestaña de Corte Láser */}
+        {/* Pestaña de Procesar SVG */}
         {activeTab === 2 && (
+          <Box>
+            <Typography variant="h5" gutterBottom sx={{ mb: 2 }}>
+              <Code sx={{ mr: 1, verticalAlign: 'middle' }} />
+              Procesar SVG con Capas Configurables
+            </Typography>
+
+            <Grid container spacing={3}>
+              {/* Cargar SVG */}
+              <Grid item xs={12}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      Cargar Archivo SVG
+                    </Typography>
+                    
+                    <Box sx={{ mb: 2 }}>
+                      <input
+                        accept=".svg"
+                        style={{ display: 'none' }}
+                        id="svg-upload"
+                        type="file"
+                        onChange={handleSvgUpload}
+                      />
+                      <label htmlFor="svg-upload">
+                        <Button
+                          variant="contained"
+                          component="span"
+                          startIcon={<Upload />}
+                          disabled={isUploadingSvg}
+                          fullWidth
+                        >
+                          {isUploadingSvg ? 'Subiendo...' : 'Seleccionar Archivo SVG'}
+                        </Button>
+                      </label>
+                    </Box>
+
+                    {svgInfo && (
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">
+                          <strong>Dimensiones:</strong> {svgInfo.width.toFixed(2)} x {svgInfo.height.toFixed(2)} mm
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          <strong>Elementos:</strong> {svgInfo.num_elements}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {svgFilePath && (
+                      <Button
+                        variant="outlined"
+                        onClick={() => loadSvgElements(svgFilePath)}
+                        disabled={isLoadingElements}
+                        startIcon={isLoadingElements ? <CircularProgress size={16} /> : <Visibility />}
+                        sx={{ mt: 2 }}
+                        fullWidth
+                      >
+                        {isLoadingElements ? 'Cargando elementos...' : 'Cargar Elementos'}
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Lista de Elementos */}
+              {svgElements.length > 0 && (
+                <Grid item xs={12} md={6}>
+                  <Card>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        Elementos SVG ({svgElements.length})
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Selecciona elementos haciendo clic en ellos
+                      </Typography>
+                      
+                      <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
+                        <List>
+                          {svgElements.map((elem) => (
+                            <ListItem
+                              key={elem.id}
+                              button
+                              selected={selectedElements.has(elem.id)}
+                              onClick={() => toggleElementSelection(elem.id)}
+                              sx={{
+                                border: selectedElements.has(elem.id) ? 2 : 1,
+                                borderColor: selectedElements.has(elem.id) ? 'primary.main' : 'divider',
+                                mb: 1,
+                                borderRadius: 1
+                              }}
+                            >
+                              <ListItemText
+                                primary={elem.id}
+                                secondary={`Tipo: ${elem.type} | Puntos: ${elem.points?.length || 0}`}
+                              />
+                              {selectedElements.has(elem.id) && (
+                                <CheckCircle color="primary" />
+                              )}
+                            </ListItem>
+                          ))}
+                        </List>
+                      </Box>
+
+                      <Typography variant="body2" sx={{ mt: 2 }}>
+                        {selectedElements.size} elemento(s) seleccionado(s)
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              )}
+
+              {/* Configuración de Capas */}
+              <Grid item xs={12} md={6}>
+                <Card>
+                  <CardContent>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                      <Typography variant="h6">
+                        Capas de Corte
+                      </Typography>
+                      <Button
+                        variant="outlined"
+                        startIcon={<Add />}
+                        onClick={addLayer}
+                        size="small"
+                      >
+                        Agregar Capa
+                      </Button>
+                    </Box>
+
+                    {svgLayers.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 4 }}>
+                        No hay capas configuradas. Crea una capa y asigna elementos seleccionados.
+                      </Typography>
+                    ) : (
+                      <Box sx={{ maxHeight: 500, overflowY: 'auto' }}>
+                        {svgLayers.map((layer, index) => (
+                          <Card key={index} variant="outlined" sx={{ mb: 2 }}>
+                            <CardContent>
+                              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                                <TextField
+                                  label="Nombre de Capa"
+                                  value={layer.layer_name}
+                                  onChange={(e) => updateLayer(index, 'layer_name', e.target.value)}
+                                  size="small"
+                                  sx={{ flexGrow: 1, mr: 1 }}
+                                />
+                                <IconButton
+                                  onClick={() => removeLayer(index)}
+                                  color="error"
+                                  size="small"
+                                >
+                                  <Remove />
+                                </IconButton>
+                              </Box>
+
+                              <Divider sx={{ my: 2 }} />
+                              
+                              <Typography variant="subtitle2" gutterBottom sx={{ mb: 2, fontWeight: 'bold' }}>
+                                Parámetros de Corte
+                              </Typography>
+                              
+                              <Grid container spacing={2}>
+                                <Grid item xs={12} sm={4}>
+                                  <TextField
+                                    label="Velocidad"
+                                    type="number"
+                                    value={layer.speed}
+                                    onChange={(e) => updateLayer(index, 'speed', parseFloat(e.target.value))}
+                                    fullWidth
+                                    size="small"
+                                    inputProps={{ min: 10, max: 2000, step: 10 }}
+                                    helperText="mm/min (recomendado: 50-200)"
+                                  />
+                                </Grid>
+                                <Grid item xs={12} sm={4}>
+                                  <TextField
+                                    label="Potencia"
+                                    type="number"
+                                    value={layer.power}
+                                    onChange={(e) => updateLayer(index, 'power', parseFloat(e.target.value))}
+                                    fullWidth
+                                    size="small"
+                                    inputProps={{ min: 0, max: 100, step: 1 }}
+                                    helperText="%"
+                                  />
+                                </Grid>
+                                <Grid item xs={12} sm={4}>
+                                  <TextField
+                                    label="Número de Pasadas"
+                                    type="number"
+                                    value={layer.num_passes || 1}
+                                    onChange={(e) => updateLayer(index, 'num_passes', parseInt(e.target.value) || 1)}
+                                    fullWidth
+                                    size="small"
+                                    inputProps={{ min: 1, max: 50, step: 1 }}
+                                    helperText="Repeticiones"
+                                  />
+                                </Grid>
+                              </Grid>
+
+                              <Divider sx={{ my: 2 }} />
+                              
+                              <Typography variant="subtitle2" gutterBottom sx={{ mb: 2, fontWeight: 'bold' }}>
+                                Elementos Asignados
+                              </Typography>
+                              
+                              <Box sx={{ mb: 2 }}>
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                  {layer.element_ids.length > 0 
+                                    ? `${layer.element_ids.length} elemento(s) asignado(s) a esta capa`
+                                    : 'No hay elementos asignados a esta capa'}
+                                </Typography>
+                                
+                                {layer.element_ids.length > 0 && (
+                                  <Box sx={{ 
+                                    display: 'flex', 
+                                    flexWrap: 'wrap', 
+                                    gap: 0.5,
+                                    mt: 1,
+                                    p: 1,
+                                    bgcolor: 'grey.100',
+                                    borderRadius: 1
+                                  }}>
+                                    {layer.element_ids.map((elemId) => (
+                                      <Chip
+                                        key={elemId}
+                                        label={elemId}
+                                        size="small"
+                                        onDelete={() => {
+                                          setSvgLayers(prev => prev.map((l, i) => 
+                                            i === index 
+                                              ? { ...l, element_ids: l.element_ids.filter(id => id !== elemId) }
+                                              : l
+                                          ));
+                                        }}
+                                        sx={{ fontSize: '0.75rem' }}
+                                      />
+                                    ))}
+                                  </Box>
+                                )}
+                              </Box>
+
+                              <Button
+                                variant="outlined"
+                                onClick={() => assignSelectedToLayer(index)}
+                                disabled={selectedElements.size === 0}
+                                fullWidth
+                                size="small"
+                                startIcon={<Add />}
+                              >
+                                {selectedElements.size > 0
+                                  ? `Asignar ${selectedElements.size} elemento(s) seleccionado(s)`
+                                  : 'Selecciona elementos primero'}
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </Box>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Configuración Global */}
+              <Grid item xs={12}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      Configuración Global
+                    </Typography>
+                    
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} md={4}>
+                        <TextField
+                          label="Factor de Escala"
+                          type="number"
+                          value={svgScale}
+                          onChange={(e) => setSvgScale(parseFloat(e.target.value))}
+                          fullWidth
+                          size="small"
+                          inputProps={{ min: 0.1, max: 10, step: 0.1 }}
+                          helperText="Escala del diseño SVG"
+                        />
+                      </Grid>
+                      <Grid item xs={12} md={4}>
+                        <TextField
+                          label="Offset X (mm)"
+                          type="number"
+                          value={svgOffsetX}
+                          onChange={(e) => setSvgOffsetX(parseFloat(e.target.value))}
+                          fullWidth
+                          size="small"
+                          inputProps={{ step: 0.1 }}
+                          helperText="Desplazamiento horizontal"
+                        />
+                      </Grid>
+                      <Grid item xs={12} md={4}>
+                        <TextField
+                          label="Offset Y (mm)"
+                          type="number"
+                          value={svgOffsetY}
+                          onChange={(e) => setSvgOffsetY(parseFloat(e.target.value))}
+                          fullWidth
+                          size="small"
+                          inputProps={{ step: 0.1 }}
+                          helperText="Desplazamiento vertical"
+                        />
+                      </Grid>
+                    </Grid>
+
+                    <Box sx={{ mt: 3 }}>
+                      <Button
+                        variant="contained"
+                        onClick={generateSvgGCode}
+                        disabled={isGeneratingSvgGcode || svgLayers.length === 0}
+                        startIcon={isGeneratingSvgGcode ? <CircularProgress size={16} /> : <PlayArrow />}
+                        fullWidth
+                        size="large"
+                      >
+                        {isGeneratingSvgGcode ? 'Generando G-code...' : 'Generar G-code desde SVG'}
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          </Box>
+        )}
+
+        {/* Pestaña de Corte Láser */}
+        {activeTab === 4 && (
           <Box>
             <Typography variant="h5" gutterBottom sx={{ mb: 2 }}>
               <ContentCut sx={{ mr: 1, verticalAlign: 'middle' }} />
@@ -1775,7 +2315,7 @@ const App: React.FC = () => {
         )}
 
         {/* Pestaña de Vista Previa 3D */}
-        {activeTab === 3 && (
+        {activeTab === 4 && (
           <Box>
             <Typography variant="h5" gutterBottom sx={{ mb: 2 }}>
               <ViewInAr sx={{ mr: 1, verticalAlign: 'middle' }} />
@@ -1792,7 +2332,7 @@ const App: React.FC = () => {
         )}
 
         {/* Pestaña de G-code */}
-        {activeTab === 4 && (
+        {activeTab === 5 && (
           <Box>
             <Typography variant="h5" gutterBottom sx={{ mb: 2 }}>
               <Code sx={{ mr: 1, verticalAlign: 'middle' }} />

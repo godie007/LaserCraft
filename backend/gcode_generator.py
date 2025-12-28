@@ -20,6 +20,9 @@ import tempfile
 class LaserGCodeGenerator:
     """Generador profesional de G-code para láser"""
     
+    # Rango de potencia del controlador láser (0-1000 es común en GRBL y controladores modernos)
+    LASER_POWER_MAX_VALUE = 1000  # Valor máximo del comando M3 S (100% = 1000)
+    
     def __init__(self, table_width: float = 50.0, table_height: float = 50.0, 
                  font_size: float = 8.0, line_height: float = 0.7, 
                  feed_rate: float = 60.0, font_name: str = "Arial", 
@@ -48,6 +51,24 @@ class LaserGCodeGenerator:
         self.laser_power_max = laser_power_max
         self.num_layers = num_layers
         self.focus_height = focus_height
+    
+    def _convert_power_percent_to_value(self, power_percent: float) -> int:
+        """
+        Convertir porcentaje de potencia (0-100) al valor del comando M3 S (0-1000)
+        
+        Args:
+            power_percent: Potencia en porcentaje (0-100)
+            
+        Returns:
+            Valor para el comando M3 S (0-1000)
+        """
+        # Asegurar que el porcentaje esté en el rango 0-100
+        power_percent = max(0.0, min(100.0, power_percent))
+        
+        # Convertir a valor del controlador (100% = 1000)
+        power_value = int((power_percent / 100.0) * self.LASER_POWER_MAX_VALUE)
+        
+        return power_value
     
     def _get_text_contours_pil(self, text: str) -> List[np.ndarray]:
         """
@@ -255,8 +276,8 @@ class LaserGCodeGenerator:
         
         # Procesar cada capa
         for layer in range(self.num_layers):
-            # Usar la potencia máxima configurada directamente (no incremental)
-            power_value = int(self.laser_power_max)
+            # Convertir porcentaje a valor del controlador (100% = 1000)
+            power_value = self._convert_power_percent_to_value(self.laser_power_max)
             
             # Variable para rastrear la posición actual del láser
             current_x = None
@@ -452,9 +473,9 @@ class LaserGCodeGenerator:
                     if first_point:
                         # Para el primer punto: posicionar, encender láser, empezar a dibujar
                         gcode_lines.append(f"G0 X{x:.3f} Y{y:.3f} ; Posicionar en primer punto")
-                        # Usar la potencia máxima configurada directamente
-                        power = self.laser_power_max
-                        gcode_lines.append(f"M3 S{int(power)} ; Encender láser - Capa {current_layer}")
+                        # Convertir porcentaje a valor del controlador
+                        power_value = self._convert_power_percent_to_value(self.laser_power_max)
+                        gcode_lines.append(f"M3 S{power_value} ; Encender láser - Capa {current_layer}")
                         gcode_lines.append(f"G1 X{x:.3f} Y{y:.3f} F{self.feed_rate} ; Iniciar grabado")
                         laser_on = True
                         first_point = False
@@ -462,9 +483,9 @@ class LaserGCodeGenerator:
                         # Para contornos siguientes: posicionar, encender láser, empezar a dibujar
                         gcode_lines.append(f"G0 X{x:.3f} Y{y:.3f} ; Posicionar")
                         if not laser_on:
-                            # Usar la potencia máxima configurada directamente
-                            power = self.laser_power_max
-                            gcode_lines.append(f"M3 S{int(power)} ; Encender láser - Capa {current_layer}")
+                            # Convertir porcentaje a valor del controlador
+                            power_value = self._convert_power_percent_to_value(self.laser_power_max)
+                            gcode_lines.append(f"M3 S{power_value} ; Encender láser - Capa {current_layer}")
                             laser_on = True
                         gcode_lines.append(f"G1 X{x:.3f} Y{y:.3f} F{self.feed_rate} ; Iniciar grabado")
                 else:
@@ -541,7 +562,7 @@ class LaserGCodeGenerator:
             gcode_lines.extend([
                 f"; Pasada {pass_num + 1} de {int(cut_depth)}",
                 f"G0 X{start_x:.3f} Y{start_y:.3f} ; Posicionar en inicio",
-                f"M3 S{int(cut_power)} ; Encender láser - Potencia {cut_power}%",
+                f"M3 S{self._convert_power_percent_to_value(cut_power)} ; Encender láser - Potencia {cut_power}%",
                 f"G1 X{end_x:.3f} Y{end_y:.3f} F{cut_speed} ; Realizar corte",
                 "M5 ; Apagar láser"
             ])
@@ -626,6 +647,149 @@ class LaserGCodeGenerator:
         ])
         
         return gcode_lines
+    
+    def generate_gcode_from_svg_layers(self, layers: List[Dict], 
+                                      table_width: float = None, 
+                                      table_height: float = None,
+                                      scale_factor: float = 1.0,
+                                      offset_x: float = 0.0,
+                                      offset_y: float = 0.0) -> str:
+        """
+        Generar G-code desde elementos SVG organizados por capas
+        
+        Args:
+            layers: Lista de diccionarios, cada uno representa una capa con:
+                   - 'layer_name': Nombre de la capa
+                   - 'speed': Velocidad de desplazamiento (mm/min)
+                   - 'power': Potencia del láser (%)
+                   - 'elements': Lista de elementos SVG, cada uno con:
+                     - 'id': ID del elemento
+                     - 'points': Lista de puntos [(x, y), ...]
+            table_width: Ancho de la tabla (opcional, usa self.table_width si no se especifica)
+            table_height: Alto de la tabla (opcional, usa self.table_height si no se especifica)
+            scale_factor: Factor de escala para los puntos SVG
+            offset_x: Offset X para posicionar el diseño
+            offset_y: Offset Y para posicionar el diseño
+            
+        Returns:
+            G-code como string
+        """
+        gcode_lines = []
+        
+        # Usar dimensiones proporcionadas o las del generador
+        tw = table_width if table_width is not None else self.table_width
+        th = table_height if table_height is not None else self.table_height
+        
+        # Encabezado
+        gcode_lines.extend([
+            "; G-code generado desde SVG con capas configurables",
+            f"; Dimensiones de tabla: {tw}x{th}mm",
+            f"; Número de capas: {len(layers)}",
+            "",
+            "G21 ; Unidades en milímetros",
+            "G90 ; Posicionamiento absoluto",
+            "M5 ; Asegurar que el láser esté apagado",
+            "G0 X0 Y0 ; Ir al HOME (origen)"
+        ])
+        
+        # Calcular bounding box de todos los elementos para normalizar coordenadas
+        all_points_for_bbox = []
+        for layer in layers:
+            for element in layer.get('elements', []):
+                points = element.get('points', [])
+                if points:
+                    for point in points:
+                        all_points_for_bbox.append((point[0] * scale_factor, point[1] * scale_factor))
+        
+        # Normalizar coordenadas: encontrar mínimo y ajustar para que empiece en (0,0)
+        if all_points_for_bbox:
+            min_x = min(p[0] for p in all_points_for_bbox)
+            min_y = min(p[1] for p in all_points_for_bbox)
+        else:
+            min_x = 0
+            min_y = 0
+        
+        # Aplicar offset adicional para margen desde el origen
+        margin_x = offset_x
+        margin_y = offset_y
+        
+        # Procesar cada capa
+        for layer_idx, layer in enumerate(layers):
+            layer_name = layer.get('layer_name', f'Layer_{layer_idx + 1}')
+            speed = float(layer.get('speed', self.feed_rate))
+            power = float(layer.get('power', self.laser_power_max))
+            num_passes = int(layer.get('num_passes', 1))  # Número de pasadas
+            elements = layer.get('elements', [])
+            
+            if not elements:
+                continue
+            
+            # Comentario de inicio de capa
+            gcode_lines.append(f"; === Capa: {layer_name} ===")
+            gcode_lines.append(f"; Velocidad: {speed}mm/min, Potencia: {power}%, Pasadas: {num_passes}")
+            
+            # Procesar cada elemento de la capa
+            for elem_idx, element in enumerate(elements):
+                points = element.get('points', [])
+                elem_id = element.get('id', f'elem_{elem_idx}')
+                
+                if not points:
+                    continue
+                
+                # Comentario del elemento
+                gcode_lines.append(f"; Elemento: {elem_id}")
+                
+                # Repetir el corte según el número de pasadas
+                for pass_num in range(num_passes):
+                    if num_passes > 1:
+                        gcode_lines.append(f"; Pasada {pass_num + 1} de {num_passes}")
+                    
+                    # Asegurar que el láser esté apagado antes del movimiento rápido
+                    gcode_lines.append("M5 ; Asegurar láser apagado para desplazamiento")
+                    
+                    # Normalizar coordenadas: restar mínimo y agregar margen
+                    # Esto asegura que el diseño empiece desde la esquina inferior izquierda (0,0)
+                    first_point = points[0]
+                    x = (first_point[0] * scale_factor) - min_x + margin_x
+                    y = (first_point[1] * scale_factor) - min_y + margin_y
+                    gcode_lines.append(f"G0 X{x:.3f} Y{y:.3f} ; Desplazamiento rápido (láser apagado)")
+                    
+                    # Encender láser SOLO cuando vamos a cortar (G1)
+                    # Convertir porcentaje a valor del controlador (100% = 1000)
+                    power_value = self._convert_power_percent_to_value(power)
+                    gcode_lines.append(f"M3 S{power_value} ; Encender láser - {layer_name} ({power}% = {power_value})")
+                    
+                    # Dibujar el path (normalizando coordenadas) - SOLO aquí el láser está encendido
+                    for point in points[1:]:
+                        x = (point[0] * scale_factor) - min_x + margin_x
+                        y = (point[1] * scale_factor) - min_y + margin_y
+                        gcode_lines.append(f"G1 X{x:.3f} Y{y:.3f} F{speed} ; Corte con láser encendido")
+                    
+                    # Cerrar path si el primer y último punto son diferentes
+                    if len(points) > 1 and points[0] != points[-1]:
+                        first_x = (points[0][0] * scale_factor) - min_x + margin_x
+                        first_y = (points[0][1] * scale_factor) - min_y + margin_y
+                        gcode_lines.append(f"G1 X{first_x:.3f} Y{first_y:.3f} F{speed} ; Cerrar path")
+                    
+                    # Apagar láser inmediatamente después del corte
+                    gcode_lines.append("M5 ; Apagar láser después del corte")
+                    
+                    # Pausa entre pasadas (excepto en la última)
+                    if pass_num < num_passes - 1:
+                        gcode_lines.append("G4 P0.5 ; Pausa entre pasadas")
+            
+            # Pausa entre capas (excepto en la última)
+            if layer_idx < len(layers) - 1:
+                gcode_lines.append("G4 P0.5 ; Pausa entre capas")
+        
+        # Finalizar - regresar al HOME
+        gcode_lines.extend([
+            "",
+            "G0 X0 Y0 ; Regresar al HOME",
+            "M30 ; Fin del programa"
+        ])
+        
+        return '\n'.join(gcode_lines)
     
     def save_gcode(self, gcode_lines: List[str], filename: str) -> None:
         """

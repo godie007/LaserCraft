@@ -49,26 +49,12 @@ const EngravingMesh: React.FC<{
               {/* Línea principal del grabado - en alto relieve */}
               <line
                 geometry={new THREE.BufferGeometry().setFromPoints([
-                  new THREE.Vector3(prevPoint.x, prevPoint.y, 1.0),
-                  new THREE.Vector3(point.x, point.y, 1.0)
+                  new THREE.Vector3(prevPoint.x, prevPoint.y, 0.1),
+                  new THREE.Vector3(point.x, point.y, 0.1)
                 ])}
                 material={new THREE.LineBasicMaterial({ 
-                  color: '#FFD700', // Color dorado brillante
-                  linewidth: 12,
-                  transparent: true,
-                  opacity: 1.0
-                })}
-              />
-              
-              {/* Línea de sombra para dar profundidad */}
-              <line
-                geometry={new THREE.BufferGeometry().setFromPoints([
-                  new THREE.Vector3(prevPoint.x, prevPoint.y, 0.7),
-                  new THREE.Vector3(point.x, point.y, 0.7)
-                ])}
-                material={new THREE.LineBasicMaterial({ 
-                  color: '#B8860B', // Color dorado oscuro para sombra
-                  linewidth: 14,
+                  color: '#FF4444', // Color rojo para corte láser
+                  linewidth: 3,
                   transparent: true,
                   opacity: 0.9
                 })}
@@ -97,20 +83,11 @@ const EngravingMesh: React.FC<{
         if (!hasConnection && !hasNextConnection) {
           return (
             <group key={`isolated-${pointIndex}`}>
-              {/* Punto principal del grabado - en alto relieve */}
+              {/* Punto del grabado */}
               <Box
-                position={[point.x, point.y, 1.0]}
-                args={[1.2, 1.2, 1.0]}
-                material-color="#FFD700" // Color dorado brillante
-                material-transparent
-                material-opacity={1.0}
-              />
-              
-              {/* Sombra del grabado */}
-              <Box
-                position={[point.x, point.y, 0.7]}
-                args={[1.3, 1.3, 0.5]}
-                material-color="#B8860B" // Color dorado oscuro
+                position={[point.x, point.y, 0.1]}
+                args={[0.5, 0.5, 0.2]}
+                material-color="#FF4444" // Color rojo para corte láser
                 material-transparent
                 material-opacity={0.9}
               />
@@ -137,7 +114,7 @@ const TableMesh: React.FC<{
   const gridSize = 5; // Cada 5mm
   const gridLines = [];
   
-  // Líneas verticales
+  // Líneas verticales (paralelas al eje Y en CNCjs)
   for (let x = 0; x <= tableWidth; x += gridSize) {
     gridLines.push(
       <line
@@ -146,12 +123,12 @@ const TableMesh: React.FC<{
           new THREE.Vector3(x, 0, 0),
           new THREE.Vector3(x, tableHeight, 0)
         ])}
-        material={new THREE.LineBasicMaterial({ color: '#888888', opacity: 0.1, transparent: true })}
+        material={new THREE.LineBasicMaterial({ color: '#666666', opacity: 0.3, transparent: true, linewidth: 1 })}
       />
     );
   }
   
-  // Líneas horizontales
+  // Líneas horizontales (paralelas al eje X en CNCjs)
   for (let y = 0; y <= tableHeight; y += gridSize) {
     gridLines.push(
       <line
@@ -160,20 +137,32 @@ const TableMesh: React.FC<{
           new THREE.Vector3(0, y, 0),
           new THREE.Vector3(tableWidth, y, 0)
         ])}
-        material={new THREE.LineBasicMaterial({ color: '#888888', opacity: 0.1, transparent: true })}
+        material={new THREE.LineBasicMaterial({ color: '#666666', opacity: 0.3, transparent: true, linewidth: 1 })}
       />
     );
   }
   
   return (
     <group>
-      {/* Tabla base con textura de madera más clara */}
+      {/* Tabla base - origen en esquina inferior izquierda (0,0) */}
       <Box
-        position={[tableWidth / 2, tableHeight / 2, -0.5]}
-        args={[tableWidth, tableHeight, 1]}
-        material-color="#D2B48C" // Color madera más claro
+        position={[tableWidth / 2, tableHeight / 2, -0.1]}
+        args={[tableWidth, tableHeight, 0.2]}
+        material-color="#E8E8E8" // Color gris claro para la tabla
         material-transparent
-        material-opacity={0.1} // Muy transparente
+        material-opacity={0.4}
+      />
+      
+      {/* Líneas de borde de la tabla */}
+      <line
+        geometry={new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0, 0, 0),
+          new THREE.Vector3(tableWidth, 0, 0),
+          new THREE.Vector3(tableWidth, tableHeight, 0),
+          new THREE.Vector3(0, tableHeight, 0),
+          new THREE.Vector3(0, 0, 0)
+        ])}
+        material={new THREE.LineBasicMaterial({ color: '#333333', linewidth: 2 })}
       />
       {/* Cuadrícula */}
       {gridLines}
@@ -226,9 +215,10 @@ const AxisLabels: React.FC<{
   return (
     <group>
       {/* Etiquetas de ejes principales */}
+      {/* Eje X (horizontal, hacia la derecha) */}
       <Text
-        position={[tableWidth / 2, -3, 0]}
-        fontSize={1.2}
+        position={[tableWidth / 2, -2, 0]}
+        fontSize={1.5}
         color="red"
         anchorX="center"
         anchorY="middle"
@@ -236,9 +226,10 @@ const AxisLabels: React.FC<{
         X
       </Text>
       
+      {/* Eje Y (hacia adelante, perpendicular a X) */}
       <Text
-        position={[-3, tableHeight / 2, 0]}
-        fontSize={1.2}
+        position={[-2, tableHeight / 2, 0]}
+        fontSize={1.5}
         color="green"
         anchorX="center"
         anchorY="middle"
@@ -247,15 +238,26 @@ const AxisLabels: React.FC<{
         Y
       </Text>
       
+      {/* Eje Z (vertical, hacia arriba) */}
       <Text
-        position={[-3, -3, maxZ / 2]}
-        fontSize={1.2}
+        position={[-2, -2, maxZ / 2]}
+        fontSize={1.5}
         color="blue"
         anchorX="center"
         anchorY="middle"
-        rotation={[0, 0, Math.PI / 2]}
       >
         Z
+      </Text>
+      
+      {/* Origen (0,0) marcado */}
+      <Text
+        position={[0, 0, 0.5]}
+        fontSize={1.0}
+        color="orange"
+        anchorX="center"
+        anchorY="middle"
+      >
+        (0,0)
       </Text>
       
       {/* Etiquetas de medidas */}
@@ -309,7 +311,22 @@ const GCodePreview3D: React.FC<GCodePreview3DProps> = ({
         layerIndex++;
       }
       
-      // Detectar comandos G1 (movimiento con láser encendido)
+      // Detectar comandos G0 (movimiento rápido - láser apagado)
+      else if (trimmedLine.startsWith('G0') && currentLayer) {
+        const xMatch = trimmedLine.match(/X([\d.-]+)/);
+        const yMatch = trimmedLine.match(/Y([\d.-]+)/);
+        
+        if (xMatch && yMatch) {
+          const x = parseFloat(xMatch[1]);
+          const y = parseFloat(yMatch[1]);
+          const z = currentLayer.layer * lineHeight;
+          
+          // G0 es movimiento rápido, no dibuja, pero actualiza posición
+          // No agregamos a currentPath, pero actualizamos la posición
+        }
+      }
+      
+      // Detectar comandos G1 (movimiento con láser encendido - dibuja)
       else if (trimmedLine.startsWith('G1') && currentLayer) {
         const xMatch = trimmedLine.match(/X([\d.-]+)/);
         const yMatch = trimmedLine.match(/Y([\d.-]+)/);
@@ -323,20 +340,34 @@ const GCodePreview3D: React.FC<GCodePreview3DProps> = ({
         }
       }
       
-      // Detectar fin de capa (M5)
-      else if (trimmedLine === 'M5' && currentLayer) {
+      // Detectar fin de capa (M5 - apagar láser)
+      else if (trimmedLine.startsWith('M5') && currentLayer) {
+        // Guardar el path actual si tiene puntos
         if (currentPath.length > 0) {
-          currentLayer.paths = [...currentPath];
-          parsedLayers.push(currentLayer);
+          if (currentLayer.paths.length === 0) {
+            // Si es el primer path de la capa, crear nuevo array
+            currentLayer.paths = [...currentPath];
+          } else {
+            // Agregar al path existente
+            currentLayer.paths.push(...currentPath);
+          }
         }
         currentPath = [];
       }
     }
     
     // Agregar la última capa si existe
-    if (currentLayer && currentPath.length > 0) {
-      currentLayer.paths = [...currentPath];
-      parsedLayers.push(currentLayer);
+    if (currentLayer) {
+      if (currentPath.length > 0) {
+        if (currentLayer.paths.length === 0) {
+          currentLayer.paths = [...currentPath];
+        } else {
+          currentLayer.paths.push(...currentPath);
+        }
+      }
+      if (currentLayer.paths.length > 0) {
+        parsedLayers.push(currentLayer);
+      }
     }
     
     return parsedLayers;
@@ -425,25 +456,34 @@ const GCodePreview3D: React.FC<GCodePreview3DProps> = ({
       {/* Canvas 3D */}
       <Canvas
         camera={{ 
-          position: [0, 0, maxZ + 20], 
-          fov: 45,
-          up: [0, 1, 0]
+          position: [
+            Math.max(tableWidth, (engravingBounds.maxX - engravingBounds.minX) + 40) / 2, 
+            Math.max(tableHeight, (engravingBounds.maxY - engravingBounds.minY) + 40) / 2, 
+            Math.max(maxZ + 20, 50)
+          ], 
+          fov: 50,
+          up: [0, 0, 1] // Z hacia arriba (como CNCjs)
         }}
         style={{ width: '100%', height: 'calc(100% - 50px)' }}
       >
         {/* Iluminación mejorada */}
-        <ambientLight intensity={0.4} />
-        <directionalLight position={[10, 10, 10]} intensity={1.2} />
-        <pointLight position={[0, 0, 5]} intensity={0.8} />
+        <ambientLight intensity={0.5} />
+        <directionalLight position={[10, 10, 10]} intensity={1.0} />
+        <directionalLight position={[-10, -10, 5]} intensity={0.5} />
+        <pointLight position={[0, 0, maxZ + 10]} intensity={0.8} />
         
-        {/* Controles de órbita */}
+        {/* Controles de órbita - centrado en el origen (esquina inferior izquierda) */}
         <OrbitControls
           enablePan={true}
           enableZoom={true}
           enableRotate={true}
-          minDistance={10}
-          maxDistance={100}
-          target={[tableWidth / 2, tableHeight / 2, 0]}
+          minDistance={20}
+          maxDistance={200}
+          target={[
+            Math.max(tableWidth, (engravingBounds.maxX - engravingBounds.minX) + 40) / 2, 
+            Math.max(tableHeight, (engravingBounds.maxY - engravingBounds.minY) + 40) / 2, 
+            0
+          ]}
           autoRotate={false}
         />
         

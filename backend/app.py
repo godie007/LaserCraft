@@ -14,6 +14,7 @@ import numpy as np
 from datetime import datetime
 from gcode_generator import LaserGCodeGenerator
 from image_processor import ImageProcessor
+from svg_processor import SVGProcessor
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -25,6 +26,7 @@ OUTPUT_FOLDER = 'output'
 PREVIEW_FOLDER = 'previews'
 ALLOWED_EXTENSIONS = {'txt', 'gcode'}
 ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'bmp', 'tiff', 'tif'}
+ALLOWED_SVG_EXTENSIONS = {'svg'}
 MAX_FILE_SIZE = 16 * 1024 * 1024  # 16MB
 
 # Crear directorios si no existen
@@ -32,17 +34,36 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 os.makedirs(PREVIEW_FOLDER, exist_ok=True)
 
-# Inicializar procesador de imágenes
+# Inicializar procesadores
 image_processor = ImageProcessor()
+svg_processor = SVGProcessor()
 
 def allowed_image_file(filename):
     """Verificar si el archivo es una imagen válida"""
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
 
+def allowed_svg_file(filename):
+    """Verificar si el archivo es un SVG válido"""
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_SVG_EXTENSIONS
+
 def save_uploaded_file(file, folder):
     """Guardar archivo subido de forma segura"""
     if file and allowed_image_file(file.filename):
+        filename = secure_filename(file.filename)
+        # Agregar timestamp para evitar conflictos
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        name, ext = os.path.splitext(filename)
+        filename = f"{name}_{timestamp}{ext}"
+        filepath = os.path.join(folder, filename)
+        file.save(filepath)
+        return filepath
+    return None
+
+def save_uploaded_svg(file, folder):
+    """Guardar archivo SVG subido de forma segura"""
+    if file and allowed_svg_file(file.filename):
         filename = secure_filename(file.filename)
         # Agregar timestamp para evitar conflictos
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -603,6 +624,234 @@ def get_preview(filename):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/upload-svg', methods=['POST'])
+def upload_svg():
+    """Subir archivo SVG para procesamiento"""
+    try:
+        print("DEBUG: upload_svg llamado")
+        print(f"DEBUG: request.files = {list(request.files.keys())}")
+        
+        if 'svg' not in request.files:
+            # Intentar con otros nombres comunes
+            file = None
+            for key in request.files:
+                if key.endswith('svg') or 'svg' in key.lower():
+                    file = request.files[key]
+                    print(f"DEBUG: Archivo encontrado con clave: {key}")
+                    break
+            
+            if file is None:
+                return jsonify({'error': 'No se encontró archivo SVG. Claves disponibles: ' + ', '.join(request.files.keys())}), 400
+        else:
+            file = request.files['svg']
+        
+        if file.filename == '':
+            return jsonify({'error': 'No se seleccionó archivo'}), 400
+        
+        print(f"DEBUG: Nombre de archivo: {file.filename}")
+        
+        if not allowed_svg_file(file.filename):
+            return jsonify({'error': 'Formato de archivo no soportado. Solo se permiten archivos SVG'}), 400
+        
+        # Verificar tamaño del archivo
+        file.seek(0, 2)  # Ir al final del archivo
+        file_size = file.tell()
+        file.seek(0)  # Volver al inicio
+        
+        print(f"DEBUG: Tamaño del archivo: {file_size} bytes")
+        
+        if file_size > MAX_FILE_SIZE:
+            return jsonify({'error': f'Archivo demasiado grande. Máximo {MAX_FILE_SIZE // (1024*1024)}MB'}), 400
+        
+        # Guardar archivo
+        filepath = save_uploaded_svg(file, UPLOAD_FOLDER)
+        if not filepath:
+            return jsonify({'error': 'Error al guardar archivo'}), 500
+        
+        print(f"DEBUG: Archivo guardado en: {filepath}")
+        
+        # Obtener información del SVG
+        try:
+            svg_info = svg_processor.get_svg_info(filepath)
+        except Exception as svg_error:
+            # Si falla al obtener info, al menos devolver que se subió correctamente
+            # pero sin información detallada
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"Error al procesar SVG: {error_details}")
+            return jsonify({
+                'success': True,
+                'message': 'SVG subido correctamente, pero hubo un error al procesarlo',
+                'filename': os.path.basename(filepath),
+                'filepath': filepath,
+                'svg_info': {
+                    'width': 100,
+                    'height': 100,
+                    'num_elements': 0,
+                    'error': str(svg_error)
+                },
+                'warning': f'Error al procesar SVG: {str(svg_error)}'
+            })
+        
+        return jsonify({
+            'success': True,
+            'message': 'SVG subido correctamente',
+            'filename': os.path.basename(filepath),
+            'filepath': filepath,
+            'svg_info': svg_info
+        })
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error en upload_svg: {error_details}")
+        return jsonify({'error': str(e), 'details': error_details}), 500
+
+@app.route('/api/svg-elements', methods=['POST'])
+def get_svg_elements():
+    """Obtener elementos del SVG"""
+    try:
+        data = request.get_json()
+        
+        if 'filepath' not in data:
+            return jsonify({'error': 'Ruta de archivo requerida'}), 400
+        
+        filepath = data['filepath']
+        
+        if not os.path.exists(filepath):
+            return jsonify({'error': 'Archivo no encontrado'}), 404
+        
+        # Extraer elementos
+        elements = svg_processor.extract_elements(filepath)
+        
+        # Convertir elementos a formato JSON serializable
+        elements_data = []
+        for elem in elements:
+            # Convertir path a puntos para preview
+            points = svg_processor.path_to_points(elem['d'], num_points=50)
+            
+            elements_data.append({
+                'id': elem['id'],
+                'type': elem['type'],
+                'd': elem['d'],
+                'fill': elem['fill'],
+                'stroke': elem['stroke'],
+                'stroke_width': elem['stroke_width'],
+                'points': points[:100],  # Limitar puntos para respuesta
+                'transform': elem.get('transform', '')
+            })
+        
+        return jsonify({
+            'success': True,
+            'elements': elements_data,
+            'total_elements': len(elements_data)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/generate-from-svg', methods=['POST'])
+def generate_gcode_from_svg():
+    """Generar G-code desde SVG con capas configurables"""
+    try:
+        data = request.get_json()
+        
+        # Validar parámetros requeridos
+        required_params = ['filepath', 'layers']
+        for param in required_params:
+            if param not in data:
+                return jsonify({'error': f'Parámetro requerido faltante: {param}'}), 400
+        
+        filepath = data['filepath']
+        layers_config = data['layers']  # Lista de capas con elementos asignados
+        
+        # Parámetros opcionales
+        table_width = float(data.get('table_width', 50.0))
+        table_height = float(data.get('table_height', 50.0))
+        scale_factor = float(data.get('scale_factor', 1.0))
+        offset_x = float(data.get('offset_x', 0.0))
+        offset_y = float(data.get('offset_y', 0.0))
+        
+        if not os.path.exists(filepath):
+            return jsonify({'error': 'Archivo no encontrado'}), 404
+        
+        # Extraer elementos del SVG
+        all_elements = svg_processor.extract_elements(filepath)
+        
+        # Crear diccionario de elementos por ID para acceso rápido
+        elements_dict = {elem['id']: elem for elem in all_elements}
+        
+        # Procesar capas
+        layers = []
+        for layer_config in layers_config:
+            layer_name = layer_config.get('layer_name', 'Layer')
+            speed = float(layer_config.get('speed', 300.0))
+            power = float(layer_config.get('power', 100.0))
+            element_ids = layer_config.get('element_ids', [])
+            
+            # Obtener elementos de esta capa
+            layer_elements = []
+            for elem_id in element_ids:
+                if elem_id in elements_dict:
+                    elem = elements_dict[elem_id]
+                    # Convertir path a puntos
+                    points = svg_processor.path_to_points(elem['d'], num_points=200)
+                    layer_elements.append({
+                        'id': elem_id,
+                        'points': points
+                    })
+            
+            if layer_elements:
+                num_passes = int(layer_config.get('num_passes', 1))
+                layers.append({
+                    'layer_name': layer_name,
+                    'speed': speed,
+                    'power': power,
+                    'num_passes': num_passes,
+                    'elements': layer_elements
+                })
+        
+        if not layers:
+            return jsonify({'error': 'No hay elementos asignados a capas'}), 400
+        
+        # Crear generador de G-code
+        generator = LaserGCodeGenerator(
+            table_width=table_width,
+            table_height=table_height,
+            feed_rate=300.0,  # Valor por defecto, se sobrescribe por capa
+            laser_power_max=100.0  # Valor por defecto, se sobrescribe por capa
+        )
+        
+        # Generar G-code
+        gcode = generator.generate_gcode_from_svg_layers(
+            layers=layers,
+            table_width=table_width,
+            table_height=table_height,
+            scale_factor=scale_factor,
+            offset_x=offset_x,
+            offset_y=offset_y
+        )
+        
+        # Guardar archivo G-code
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"svg_laser_output_{timestamp}.gcode"
+        filepath = os.path.join(OUTPUT_FOLDER, filename)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(gcode)
+        
+        return jsonify({
+            'success': True,
+            'message': 'G-code generado correctamente desde SVG',
+            'filename': filename,
+            'download_url': f'/api/download/{filename}',
+            'gcode': gcode,
+            'layers_processed': len(layers)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/generate-cut', methods=['POST'])
 def generate_cut_gcode():
     """Generar G-code para corte láser"""
@@ -886,4 +1135,4 @@ def get_cut_presets():
     return jsonify(presets)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5001)
